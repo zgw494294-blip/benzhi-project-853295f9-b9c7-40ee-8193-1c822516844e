@@ -23,12 +23,28 @@ func (s *SQLiteStore) CreateBatch(_ context.Context, key, payloadHash string, ba
 	if _, exists := s.state.Batches[batch.ID]; exists {
 		return Receipt{}, false, domain.Conflict("批次标识已存在")
 	}
+	batchKey := "create-batch" + "\x00" + key
+	previousBatch, hadBatch := s.state.Batches[batch.ID]
+	previousReceipt, hadReceipt := s.state.Idempotency[batchKey]
 	s.state.Batches[batch.ID] = &batchRecord{Batch: cloneBatch(batch)}
 	receipt := Receipt{Batch: cloneBatch(batch)}
 	if err := s.saveReceipt("create-batch", key, payloadHash, receipt); err != nil {
 		return Receipt{}, false, err
 	}
-	return receipt, false, s.commitLocked()
+	if err := s.commitLocked(); err != nil {
+		if hadBatch {
+			s.state.Batches[batch.ID] = previousBatch
+		} else {
+			delete(s.state.Batches, batch.ID)
+		}
+		if hadReceipt {
+			s.state.Idempotency[batchKey] = previousReceipt
+		} else {
+			delete(s.state.Idempotency, batchKey)
+		}
+		return Receipt{}, false, err
+	}
+	return receipt, false, nil
 }
 func (s *SQLiteStore) GetBatch(_ context.Context, id string) (*domain.AcclimatizationBatch, error) {
 	s.mu.Lock()
@@ -112,12 +128,24 @@ func (s *SQLiteStore) updateBatch(id string, expected int64, operation, key, pay
 	}
 	batch.Version++
 	batch.UpdatedAt = time.Now().UTC()
+	previousBatch := s.state.Batches[id]
+	receiptKey := scope + "\x00" + key
+	previousReceipt, hadReceipt := s.state.Idempotency[receiptKey]
 	s.state.Batches[id] = &batchRecord{Batch: cloneBatch(batch)}
 	receipt := Receipt{Batch: cloneBatch(batch), Result: append(json.RawMessage(nil), result...)}
 	if err := s.saveReceipt(scope, key, payloadHash, receipt); err != nil {
 		return Receipt{}, false, err
 	}
-	return receipt, false, s.commitLocked()
+	if err := s.commitLocked(); err != nil {
+		s.state.Batches[id] = previousBatch
+		if hadReceipt {
+			s.state.Idempotency[receiptKey] = previousReceipt
+		} else {
+			delete(s.state.Idempotency, receiptKey)
+		}
+		return Receipt{}, false, err
+	}
+	return receipt, false, nil
 }
 func (s *SQLiteStore) IssueCredential(_ context.Context, id string, expected int64, operation, key, payloadHash string, credential domain.AdmissionCredential) (Receipt, bool, error) {
 	if expected < 1 {
@@ -149,6 +177,11 @@ func (s *SQLiteStore) IssueCredential(_ context.Context, id string, expected int
 	if _, exists := s.state.ByBatch[id]; exists {
 		return Receipt{}, false, domain.Conflict("批次已经签发凭据")
 	}
+	previousBatch := s.state.Batches[id]
+	previousCredential, hadCredential := s.state.Credentials[credential.ID]
+	previousByBatch, hadByBatch := s.state.ByBatch[id]
+	receiptKey := scope + "\x00" + key
+	previousReceipt, hadReceipt := s.state.Idempotency[receiptKey]
 	s.state.Batches[id] = &batchRecord{Batch: cloneBatch(batch)}
 	s.state.Credentials[credential.ID] = &domainCredential{Credential: cloneCredential(&credential)}
 	s.state.ByBatch[id] = credential.ID
@@ -156,7 +189,26 @@ func (s *SQLiteStore) IssueCredential(_ context.Context, id string, expected int
 	if err := s.saveReceipt(scope, key, payloadHash, receipt); err != nil {
 		return Receipt{}, false, err
 	}
-	return receipt, false, s.commitLocked()
+	if err := s.commitLocked(); err != nil {
+		s.state.Batches[id] = previousBatch
+		if hadCredential {
+			s.state.Credentials[credential.ID] = previousCredential
+		} else {
+			delete(s.state.Credentials, credential.ID)
+		}
+		if hadByBatch {
+			s.state.ByBatch[id] = previousByBatch
+		} else {
+			delete(s.state.ByBatch, id)
+		}
+		if hadReceipt {
+			s.state.Idempotency[receiptKey] = previousReceipt
+		} else {
+			delete(s.state.Idempotency, receiptKey)
+		}
+		return Receipt{}, false, err
+	}
+	return receipt, false, nil
 }
 func (s *SQLiteStore) GetCredentialByBatch(_ context.Context, batchID string) (*domain.AdmissionCredential, error) {
 	s.mu.Lock()
