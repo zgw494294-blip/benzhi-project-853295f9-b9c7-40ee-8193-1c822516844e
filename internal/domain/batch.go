@@ -330,10 +330,14 @@ func (b *AcclimatizationBatch) DecideReview(record ReviewRecord) error {
 		if err := ValidateName("requiredAction", record.RequiredAction, 500); err != nil {
 			return err
 		}
-		stage.Status = StagePlanned
-		stage.StartedAt = nil
-		stage.CompletedAt = nil
-		stage.Attempt++
+		for i := stage.Sequence - 1; i < len(b.Stages); i++ {
+			b.Stages[i].Status = StagePlanned
+			b.Stages[i].StartedAt = nil
+			b.Stages[i].CompletedAt = nil
+			if i == stage.Sequence-1 {
+				b.Stages[i].Attempt++
+			}
+		}
 		b.CurrentStageID = stage.ID
 		b.Status, b.CorrectionStageID, b.CorrectionRequired = BatchCorrection, record.RequiredStageID, record.RequiredAction
 		b.CorrectionTasks = append(b.CorrectionTasks, CorrectionTask{ID: record.ID, RequiredStageID: record.RequiredStageID, RequiredAction: record.RequiredAction, SubmissionVersion: record.SubmissionVersion, RequiredAttempt: stage.Attempt, CreatedAt: record.DecidedAt})
