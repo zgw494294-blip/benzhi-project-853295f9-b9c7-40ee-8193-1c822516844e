@@ -50,7 +50,17 @@ func (p *Planner) Generate(batch *domain.AcclimatizationBatch) ([]domain.Acclima
 	}
 	cacheKey := fmt.Sprintf("%s:%.6f:%.6f:%.6f:%.6f:%.6f:%.6f", basis.Sensitivity, basis.MaxTemperatureRate, basis.MaxHumidityRate, allowedTemp.Min, allowedTemp.Max, allowedHumidity.Min, allowedHumidity.Max)
 	if p.cachedKey == cacheKey {
-		return append([]domain.AcclimatizationStage(nil), p.cachedStages...), p.cachedBasis, nil
+		stages := make([]domain.AcclimatizationStage, len(p.cachedStages))
+		for i, cached := range p.cachedStages {
+			stages[i] = cached
+			stages[i].ID = p.NewID("stage")
+			stages[i].BatchID = batch.ID
+			stages[i].Status = domain.StagePlanned
+			stages[i].Attempt = 1
+			stages[i].StartedAt = nil
+			stages[i].CompletedAt = nil
+		}
+		return stages, p.cachedBasis, nil
 	}
 	tempPads := []float64{4, 2, 0}
 	humidityPads := []float64{12, 6, 0}
