@@ -15,13 +15,6 @@ func (s *Service) IssueCredential(ctx context.Context, batchID, reviewerName str
 	if err != nil {
 		return CredentialResult{}, err
 	}
-	if batch.Status == domain.BatchCertified {
-		credential, getErr := s.store.GetCredentialByBatch(ctx, batchID)
-		if getErr != nil {
-			return CredentialResult{}, getErr
-		}
-		return CredentialResult{Batch: batch, Credential: credential, Replayed: true}, nil
-	}
 	if err = domain.ValidateName("reviewerName", reviewerName, 80); err != nil {
 		return CredentialResult{}, err
 	}
