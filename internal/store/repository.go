@@ -11,7 +11,10 @@ import (
 	"collection-acclimatization-pass/internal/domain"
 )
 
-func (s *SQLiteStore) CreateBatch(_ context.Context, key, payloadHash string, batch *domain.AcclimatizationBatch) (Receipt, bool, error) {
+func (s *SQLiteStore) CreateBatch(ctx context.Context, key, payloadHash string, batch *domain.AcclimatizationBatch) (Receipt, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return Receipt{}, false, err
+	}
 	if key == "" {
 		return Receipt{}, false, domain.Validation("Idempotency-Key", "创建批次必须提供幂等请求键")
 	}
@@ -30,7 +33,10 @@ func (s *SQLiteStore) CreateBatch(_ context.Context, key, payloadHash string, ba
 	}
 	return receipt, false, s.commitLocked()
 }
-func (s *SQLiteStore) GetBatch(_ context.Context, id string) (*domain.AcclimatizationBatch, error) {
+func (s *SQLiteStore) GetBatch(ctx context.Context, id string) (*domain.AcclimatizationBatch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record, ok := s.state.Batches[id]
@@ -43,7 +49,10 @@ func (s *SQLiteStore) GetBatch(_ context.Context, id string) (*domain.Acclimatiz
 	}
 	return batch, nil
 }
-func (s *SQLiteStore) ListBatches(_ context.Context, filter BatchFilter) ([]*domain.AcclimatizationBatch, error) {
+func (s *SQLiteStore) ListBatches(ctx context.Context, filter BatchFilter) ([]*domain.AcclimatizationBatch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := make([]*domain.AcclimatizationBatch, 0)
@@ -77,15 +86,18 @@ func (s *SQLiteStore) ListBatches(_ context.Context, filter BatchFilter) ([]*dom
 	})
 	return result, nil
 }
-func (s *SQLiteStore) UpdateBatch(_ context.Context, id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) error) (Receipt, bool, error) {
-	return s.updateBatch(id, expected, operation, key, payloadHash, func(batch *domain.AcclimatizationBatch) (json.RawMessage, error) {
+func (s *SQLiteStore) UpdateBatch(ctx context.Context, id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) error) (Receipt, bool, error) {
+	return s.updateBatch(ctx, id, expected, operation, key, payloadHash, func(batch *domain.AcclimatizationBatch) (json.RawMessage, error) {
 		return nil, mutate(batch)
 	})
 }
-func (s *SQLiteStore) UpdateBatchWithResult(_ context.Context, id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) (json.RawMessage, error)) (Receipt, bool, error) {
-	return s.updateBatch(id, expected, operation, key, payloadHash, mutate)
+func (s *SQLiteStore) UpdateBatchWithResult(ctx context.Context, id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) (json.RawMessage, error)) (Receipt, bool, error) {
+	return s.updateBatch(ctx, id, expected, operation, key, payloadHash, mutate)
 }
-func (s *SQLiteStore) updateBatch(id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) (json.RawMessage, error)) (Receipt, bool, error) {
+func (s *SQLiteStore) updateBatch(ctx context.Context, id string, expected int64, operation, key, payloadHash string, mutate func(*domain.AcclimatizationBatch) (json.RawMessage, error)) (Receipt, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return Receipt{}, false, err
+	}
 	if expected < 1 {
 		return Receipt{}, false, domain.Validation("expectedVersion", "expectedVersion 必须大于 0")
 	}
@@ -119,7 +131,10 @@ func (s *SQLiteStore) updateBatch(id string, expected int64, operation, key, pay
 	}
 	return receipt, false, s.commitLocked()
 }
-func (s *SQLiteStore) IssueCredential(_ context.Context, id string, expected int64, operation, key, payloadHash string, credential domain.AdmissionCredential) (Receipt, bool, error) {
+func (s *SQLiteStore) IssueCredential(ctx context.Context, id string, expected int64, operation, key, payloadHash string, credential domain.AdmissionCredential) (Receipt, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return Receipt{}, false, err
+	}
 	if expected < 1 {
 		return Receipt{}, false, domain.Validation("expectedVersion", "expectedVersion 必须大于 0")
 	}
@@ -158,7 +173,10 @@ func (s *SQLiteStore) IssueCredential(_ context.Context, id string, expected int
 	}
 	return receipt, false, s.commitLocked()
 }
-func (s *SQLiteStore) GetCredentialByBatch(_ context.Context, batchID string) (*domain.AdmissionCredential, error) {
+func (s *SQLiteStore) GetCredentialByBatch(ctx context.Context, batchID string) (*domain.AdmissionCredential, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id, ok := s.state.ByBatch[batchID]
@@ -167,12 +185,18 @@ func (s *SQLiteStore) GetCredentialByBatch(_ context.Context, batchID string) (*
 	}
 	return s.credentialLocked(id)
 }
-func (s *SQLiteStore) GetCredential(_ context.Context, id string) (*domain.AdmissionCredential, error) {
+func (s *SQLiteStore) GetCredential(ctx context.Context, id string) (*domain.AdmissionCredential, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.credentialLocked(id)
 }
-func (s *SQLiteStore) GetCredentialBundle(_ context.Context, id string) (*domain.AdmissionCredential, *domain.AcclimatizationBatch, error) {
+func (s *SQLiteStore) GetCredentialBundle(ctx context.Context, id string) (*domain.AdmissionCredential, *domain.AcclimatizationBatch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record, ok := s.state.Credentials[id]
