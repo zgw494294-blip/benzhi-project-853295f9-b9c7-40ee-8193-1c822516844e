@@ -223,9 +223,14 @@ func (s *SQLiteStore) saveReceipt(scope, key, payloadHash string, receipt Receip
 	return nil
 }
 func cloneBatch(batch *domain.AcclimatizationBatch) *domain.AcclimatizationBatch {
-	data, _ := json.Marshal(batch)
-	var clone domain.AcclimatizationBatch
-	_ = json.Unmarshal(data, &clone)
+	clone := *batch
+	clone.Profiles = append([]domain.ObjectMaterialProfile(nil), batch.Profiles...)
+	clone.Stages = append([]domain.AcclimatizationStage(nil), batch.Stages...)
+	clone.Readings = append([]domain.Reading(nil), batch.Readings...)
+	clone.Deviations = append([]domain.Deviation(nil), batch.Deviations...)
+	clone.Reviews = append([]domain.ReviewRecord(nil), batch.Reviews...)
+	clone.PlanBaseline = append([]domain.PlanStageSnapshot(nil), batch.PlanBaseline...)
+	clone.CorrectionTasks = append([]domain.CorrectionTask(nil), batch.CorrectionTasks...)
 	return &clone
 }
 func cloneCredential(credential *domain.AdmissionCredential) *domain.AdmissionCredential {
