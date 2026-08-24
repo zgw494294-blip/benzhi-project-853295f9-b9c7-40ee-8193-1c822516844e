@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "business_features": [
+    {"name": "驯化批次与材料档案", "entrypoints": ["Service.CreateBatch", "Service.AddProfile", "Service.GetBatch"]},
+    {"name": "阶段方案与环境读数", "entrypoints": ["Service.GeneratePlan", "Service.FreezePlan", "Service.StartBatch", "Service.SubmitReading"]},
+    {"name": "偏差处置与保护复核", "entrypoints": ["Service.ListDeviations", "Service.ResolveDeviation", "Service.SubmitReview", "Service.DecideReview", "Service.CompleteCorrection"]},
+    {"name": "准入凭据签发", "entrypoints": ["Service.IssueCredential", "Service.GetCredentialByBatch", "Service.GetCredential"]}
+  ],
+  "api_endpoints": [
+    {"method": "POST", "path": "/v1/acclimatization-batches"},
+    {"method": "GET", "path": "/v1/acclimatization-batches/{batchID}"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/profiles"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/plan"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/plan/freeze"},
+    {"method": "PATCH", "path": "/v1/acclimatization-batches/{batchID}/stages/{stageID}"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/start"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/readings"},
+    {"method": "GET", "path": "/v1/acclimatization-batches/{batchID}/deviations"},
+    {"method": "PATCH", "path": "/v1/acclimatization-batches/{batchID}/deviations/{deviationID}"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/review"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/review/decision"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/correction"},
+    {"method": "POST", "path": "/v1/acclimatization-batches/{batchID}/credential"},
+    {"method": "GET", "path": "/v1/acclimatization-batches/{batchID}/credential"},
+    {"method": "GET", "path": "/v1/admission-credentials/{credentialID}"
+    }
+  ],
+  "persistence": {"enabled": true, "mechanism": "本地 WAL 风格 JSON 文件"},
+  "non_api_interfaces": []
+}
