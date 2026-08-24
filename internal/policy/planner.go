@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"collection-acclimatization-pass/internal/domain"
@@ -10,11 +11,20 @@ import (
 
 type IDGenerator func(prefix string) string
 
-type Planner struct{ NewID IDGenerator }
+type Planner struct {
+	NewID IDGenerator
+
+	mu           sync.Mutex
+	cachedKey    string
+	cachedStages []domain.AcclimatizationStage
+	cachedBasis  PlanBasis
+}
 
 type PlanBasis = domain.PlanBasis
 
-func (p Planner) Generate(batch *domain.AcclimatizationBatch) ([]domain.AcclimatizationStage, PlanBasis, error) {
+func (p *Planner) Generate(batch *domain.AcclimatizationBatch) ([]domain.AcclimatizationStage, PlanBasis, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if len(batch.Profiles) == 0 {
 		return nil, PlanBasis{}, domain.InvalidState("生成方案前必须登记展品")
 	}
@@ -38,6 +48,10 @@ func (p Planner) Generate(batch *domain.AcclimatizationBatch) ([]domain.Acclimat
 	if allowedTemp.Min >= allowedTemp.Max || allowedHumidity.Min >= allowedHumidity.Max {
 		return nil, basis, domain.Validation("profiles", "展品档案不存在共同安全环境区间")
 	}
+	cacheKey := fmt.Sprintf("%s:%.6f:%.6f:%.6f:%.6f:%.6f:%.6f", basis.Sensitivity, basis.MaxTemperatureRate, basis.MaxHumidityRate, allowedTemp.Min, allowedTemp.Max, allowedHumidity.Min, allowedHumidity.Max)
+	if p.cachedKey == cacheKey {
+		return append([]domain.AcclimatizationStage(nil), p.cachedStages...), p.cachedBasis, nil
+	}
 	tempPads := []float64{4, 2, 0}
 	humidityPads := []float64{12, 6, 0}
 	baseMinutes := map[domain.Sensitivity]int{domain.SensitivityLow: 30, domain.SensitivityMedium: 45, domain.SensitivityHigh: 60, domain.SensitivityCritical: 90}[basis.Sensitivity]
@@ -53,6 +67,9 @@ func (p Planner) Generate(batch *domain.AcclimatizationBatch) ([]domain.Acclimat
 		}
 		stages = append(stages, stage)
 	}
+	p.cachedKey = cacheKey
+	p.cachedStages = append([]domain.AcclimatizationStage(nil), stages...)
+	p.cachedBasis = basis
 	return stages, basis, nil
 }
 
