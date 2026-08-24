@@ -10,11 +10,17 @@ import (
 )
 
 type Service struct {
-	store     BatchRepository
-	planner   StagePlanner
-	evaluator ReadingEvaluator
-	clock     Clock
-	newID     func(string) string
+	store                  BatchRepository
+	planner                StagePlanner
+	evaluator              ReadingEvaluator
+	clock                  Clock
+	newID                  func(string) string
+	verificationProjection credentialVerificationProjection
+}
+
+type credentialVerificationProjection struct {
+	section string
+	value   any
 }
 
 func NewService(repository BatchRepository, planner StagePlanner, evaluator ReadingEvaluator, clock Clock, newID func(string) string) *Service {

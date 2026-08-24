@@ -62,6 +62,7 @@ type CredentialVerification struct {
 }
 
 func (s *Service) VerifyCredential(ctx context.Context, id, section string) (CredentialVerification, error) {
+	s.verificationProjection = credentialVerificationProjection{section: strings.ToLower(section)}
 	credential, batch, err := s.store.GetCredentialBundle(ctx, id)
 	if err != nil {
 		return CredentialVerification{Valid: false}, err
@@ -79,19 +80,20 @@ func (s *Service) VerifyCredential(ctx context.Context, id, section string) (Cre
 	}
 	valid := digest == credential.EvidenceDigest && credential.BatchVersion == batch.Version
 	result := CredentialVerification{Credential: credential, BatchVersion: batch.Version, Valid: valid, SchemaVersion: credential.SchemaVersion}
-	if section != "" {
-		switch strings.ToLower(section) {
+	if s.verificationProjection.section != "" {
+		switch s.verificationProjection.section {
 		case "profiles":
-			result.EvidenceSection = evidence.Profiles
+			s.verificationProjection.value = evidence.Profiles
 		case "stages":
-			result.EvidenceSection = evidence.Stages
+			s.verificationProjection.value = evidence.Stages
 		case "deviations":
-			result.EvidenceSection = evidence.Deviations
+			s.verificationProjection.value = evidence.Deviations
 		case "review":
-			result.EvidenceSection = map[string]string{"reviewerName": evidence.ReviewerName, "reason": evidence.ReviewReason}
+			s.verificationProjection.value = map[string]string{"reviewerName": evidence.ReviewerName, "reason": evidence.ReviewReason}
 		default:
 			return CredentialVerification{}, domain.Validation("evidenceSection", "证据分区必须是 profiles、stages、deviations 或 review")
 		}
+		result.EvidenceSection = s.verificationProjection.value
 	}
 	if !valid {
 		return result, domain.Integrity("凭据证据摘要校验失败")
