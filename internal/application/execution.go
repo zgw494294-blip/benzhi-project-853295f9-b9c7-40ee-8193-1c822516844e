@@ -141,14 +141,35 @@ type ReadingQueryResult struct {
 	Gaps           []string         `json:"gaps"`
 }
 
+type readingQueryCacheKey struct {
+	BatchID string
+	StageID string
+	Attempt int
+	From    string
+	To      string
+	Verdict string
+	Cursor  string
+	Limit   int
+}
+
+func newReadingQueryCacheKey(batchID string, query ReadingQuery) readingQueryCacheKey {
+	key := readingQueryCacheKey{BatchID: batchID, StageID: query.StageID, Attempt: query.Attempt, Verdict: query.Verdict, Cursor: query.Cursor, Limit: query.Limit}
+	if query.From != nil {
+		key.From = query.From.UTC().Format(time.RFC3339Nano)
+	}
+	if query.To != nil {
+		key.To = query.To.UTC().Format(time.RFC3339Nano)
+	}
+	return key
+}
+
+func cloneReadingQueryResult(result ReadingQueryResult) ReadingQueryResult {
+	result.Items = append([]domain.Reading(nil), result.Items...)
+	result.Gaps = append([]string(nil), result.Gaps...)
+	return result
+}
+
 func (s *Service) QueryReadings(ctx context.Context, batchID string, query ReadingQuery) (ReadingQueryResult, error) {
-	batch, err := s.store.GetBatch(ctx, batchID)
-	if err != nil {
-		return ReadingQueryResult{}, err
-	}
-	if query.StageID != "" && batch.StageByID(query.StageID) == nil {
-		return ReadingQueryResult{}, domain.NotFound("阶段", query.StageID)
-	}
 	if query.Verdict != "" && query.Verdict != "collecting" && query.Verdict != "stage_completed" && query.Verdict != "isolate" {
 		return ReadingQueryResult{}, domain.Validation("verdict", "未知读数判定")
 	}
@@ -160,6 +181,20 @@ func (s *Service) QueryReadings(ctx context.Context, batchID string, query Readi
 	}
 	if query.Limit < 1 || query.Limit > 500 {
 		return ReadingQueryResult{}, domain.Validation("limit", "分页条数必须在 1 到 500 之间")
+	}
+	cacheKey := newReadingQueryCacheKey(batchID, query)
+	s.readingCacheMu.RLock()
+	cached, found := s.readingCache[cacheKey]
+	s.readingCacheMu.RUnlock()
+	if found {
+		return cloneReadingQueryResult(cached), nil
+	}
+	batch, err := s.store.GetBatch(ctx, batchID)
+	if err != nil {
+		return ReadingQueryResult{}, err
+	}
+	if query.StageID != "" && batch.StageByID(query.StageID) == nil {
+		return ReadingQueryResult{}, domain.NotFound("阶段", query.StageID)
 	}
 	items := make([]domain.Reading, 0)
 	for _, reading := range batch.Readings {
@@ -221,6 +256,9 @@ func (s *Service) QueryReadings(ctx context.Context, batchID string, query Readi
 			result.Stats = statsForReadings(result.Items, stage.StabilityWindow)
 		}
 	}
+	s.readingCacheMu.Lock()
+	s.readingCache[cacheKey] = cloneReadingQueryResult(result)
+	s.readingCacheMu.Unlock()
 	return result, nil
 }
 

@@ -7,14 +7,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type Service struct {
-	store     BatchRepository
-	planner   StagePlanner
-	evaluator ReadingEvaluator
-	clock     Clock
-	newID     func(string) string
+	store          BatchRepository
+	planner        StagePlanner
+	evaluator      ReadingEvaluator
+	clock          Clock
+	newID          func(string) string
+	readingCacheMu sync.RWMutex
+	readingCache   map[readingQueryCacheKey]ReadingQueryResult
 }
 
 func NewService(repository BatchRepository, planner StagePlanner, evaluator ReadingEvaluator, clock Clock, newID func(string) string) *Service {
@@ -24,7 +27,7 @@ func NewService(repository BatchRepository, planner StagePlanner, evaluator Read
 	if newID == nil {
 		newID = NewID
 	}
-	return &Service{store: repository, planner: planner, evaluator: evaluator, clock: clock, newID: newID}
+	return &Service{store: repository, planner: planner, evaluator: evaluator, clock: clock, newID: newID, readingCache: make(map[readingQueryCacheKey]ReadingQueryResult)}
 }
 
 func NewID(prefix string) string {
