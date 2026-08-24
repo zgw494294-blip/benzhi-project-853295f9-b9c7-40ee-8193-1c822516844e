@@ -75,7 +75,7 @@ func buildApp(dbPath string) (*application.Service, *store.SQLiteStore, error) {
 		return nil, nil, err
 	}
 	planner := policy.Planner{NewID: application.NewID}
-	evaluator := policy.Evaluator{MaxGap: 15 * time.Minute}
+	evaluator := &policy.Evaluator{MaxGap: 15 * time.Minute}
 	app := application.NewService(repository, planner, evaluator, application.SystemClock{}, application.NewID)
 	return app, repository, nil
 }

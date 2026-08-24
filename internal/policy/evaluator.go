@@ -20,9 +20,12 @@ type Evaluation struct {
 	HumidityRate       float64              `json:"humidityRate,omitempty"`
 }
 
-type Evaluator struct{ MaxGap time.Duration }
+type Evaluator struct {
+	MaxGap          time.Duration
+	readingsByStage map[string][]domain.Reading
+}
 
-func (e Evaluator) Evaluate(batch *domain.AcclimatizationBatch, stage domain.AcclimatizationStage, candidate domain.Reading) (Evaluation, error) {
+func (e *Evaluator) Evaluate(batch *domain.AcclimatizationBatch, stage domain.AcclimatizationStage, candidate domain.Reading) (Evaluation, error) {
 	if candidate.ObservedAt.IsZero() {
 		return Evaluation{}, domain.Validation("observedAt", "必须提供采样时间")
 	}
@@ -32,7 +35,13 @@ func (e Evaluator) Evaluate(batch *domain.AcclimatizationBatch, stage domain.Acc
 	if math.IsNaN(candidate.Humidity) || math.IsInf(candidate.Humidity, 0) {
 		return Evaluation{}, domain.Validation("humidity", "必须是有限数值")
 	}
-	readings := attemptReadings(batch.Readings, stage.ID, stage.Attempt)
+	if e.readingsByStage == nil {
+		e.readingsByStage = make(map[string][]domain.Reading)
+	}
+	readings, cached := e.readingsByStage[stage.ID]
+	if !cached {
+		readings = attemptReadings(batch.Readings, stage.ID, stage.Attempt)
+	}
 	if len(readings) > 0 && !candidate.ObservedAt.After(readings[len(readings)-1].ObservedAt) {
 		return Evaluation{}, domain.Validation("observedAt", "采样时间必须严格递增")
 	}
@@ -59,6 +68,7 @@ func (e Evaluator) Evaluate(batch *domain.AcclimatizationBatch, stage domain.Acc
 		return Evaluation{Verdict: "isolate", DeviationKind: domain.DeviationOutOfRange, Details: "读数超出当前阶段目标温湿度区间", CheckpointSequence: checkpoint}, nil
 	}
 	readings = append(readings, candidate)
+	e.readingsByStage[stage.ID] = readings
 	first := readings[0].ObservedAt
 	if candidate.ObservedAt.Sub(first) < stage.MinimumDuration {
 		return Evaluation{Verdict: "collecting", Details: "尚未达到阶段最短持续时间"}, nil
